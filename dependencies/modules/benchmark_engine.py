@@ -57,6 +57,19 @@ PURE_PYTHON_CASES = [
 PURE_PYTHON_QUICK_CASES = [
     (640, 360, 500, 1, 300),
 ]
+# NumPy is vectorized but pays per-iteration array overhead; a full 4K/8K
+# matrix would take tens of minutes, so it runs the full depth sweep at 1080p
+# plus one 4K@500 datapoint. Larger cases are reported as skipped.
+NUMPY_CASES = [
+    (1920, 1080, 500, 3, 180),
+    (1920, 1080, 1000, 3, 240),
+    (1920, 1080, 5000, 1, 300),
+    (3840, 2160, 500, 1, 300),
+]
+NUMPY_QUICK_CASES = [
+    (1920, 1080, 500, 3, 180),
+    (1920, 1080, 1000, 3, 240),
+]
 
 VERIFY_W, VERIFY_H, VERIFY_ITER = 1920, 1080, 1000
 FLOPS_PER_ITER = 8.0  # conservative estimate: 2 mul + 2 add (real), 2 mul + 1 add (imag), 2 mul + 1 add (escape check)
@@ -155,6 +168,11 @@ def _run_subprocess(cmd, timeout, measure_rss=True):
     """Run cmd, poll RSS, return (rc, stdout, stderr, peak_rss_mb, wall_s)."""
     peak = 0.0
     start = time.perf_counter()
+
+    def _bump(new_peak):
+        nonlocal peak
+        if new_peak > peak:
+            peak = new_peak
     try:
         proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                                 text=True, creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0)
@@ -170,9 +188,7 @@ def _run_subprocess(cmd, timeout, measure_rss=True):
             p = psutil.Process(proc.pid)
             while not stop.is_set():
                 try:
-                    rss = p.memory_info().rss
-                    if rss > peak:
-                        peak = rss
+                    _bump(p.memory_info().rss)
                 except Exception:  # noqa: BLE001
                     break
                 stop.wait(0.1)
@@ -351,6 +367,8 @@ def run_benchmarks(impls, ctx, quick=False):
             continue
         if impl.id == "python_pure":
             case_list = pure_cases
+        elif impl.id == "python_numpy":
+            case_list = NUMPY_CASES if not quick else NUMPY_QUICK_CASES
         else:
             case_list = cases
         for (w, h, mi, runs, timeout) in case_list:

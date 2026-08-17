@@ -220,62 +220,53 @@ def _norm(values):
 
 
 def chart_06(results, thread_scaling):
-    """Hardware saturation radar: normalized composite per language."""
-    langs = ["c", "cpp", "java", "python"]
-    # Map canonical impls per language.
+    """Hardware saturation radar: normalized composite per language (data-driven)."""
     canon = {"c": "c_openmp", "cpp": "cpp", "java": "java", "python": "python_numba"}
+
+    def _scaling(impl):
+        rows = [x for x in thread_scaling if x["impl"] == impl and x.get("mean_ms")]
+        if not rows:
+            return None
+        t1 = next((x["mean_ms"] for x in rows if x["threads"] == 1), None)
+        tmax = max((x["mean_ms"] for x in rows), default=None)
+        return (t1 / tmax) if t1 and tmax else None
 
     axes = ["Throughput", "Single-core", "Multicore", "Vectorized", "Mem-efficiency"]
     radar = {}
-    for lang in langs:
-        impl = canon[lang]
-        vals = []
-        # 1) Throughput @ 1080p@1000
+    for lang, impl in canon.items():
         r = _best_res(results, impl, 1000)
-        vals.append(1.0 / r["mean_ms"] if r and r.get("mean_ms") else None)
-        # 2) Single-core perf: threads=1 row from scaling study (or scalar variant)
-        t1 = next((x for x in thread_scaling if x["impl"] == impl and x["threads"] == 1 and x.get("mean_ms")), None)
-        if t1:
-            vals.append(1.0 / t1["mean_ms"])
-        else:
-            r1 = _res(results, "c_scalar", 1920, 1080, 1000) if lang == "c" else r
-            vals.append(1.0 / r1["mean_ms"] if r1 and r1.get("mean_ms") else None)
-        # 3) Multicore scaling: speedup 1 -> max threads
-        rows = [x for x in thread_scaling if x["impl"] == impl and x.get("mean_ms")]
-        if rows:
-            t1v = next((x["mean_ms"] for x in rows if x["threads"] == 1), None)
-            tmv = max((x["mean_ms"] for x in rows), default=None)
-            vals.append(t1v / tmv if t1v and tmv else None)
-        else:
-            vals.append(1.0)
-        # 4) Vectorized: vectorized vs scalar throughput within language
+        if not r:
+            continue
+        csc = _res(results, "c_scalar", 1920, 1080, 1000)
+        vals = [
+            1.0 / r["mean_ms"] if r.get("mean_ms") else None,                     # throughput
+            _scaling(impl),                                                          # single-core (t1 from scaling)
+            _scaling(impl),                                                          # multicore (speedup)
+            None,                                                                    # vectorized (filled below)
+            1.0 / r["peak_rss_mb"] if r.get("peak_rss_mb") else None,              # mem efficiency
+        ]
+        # Vectorized: vectorized vs scalar throughput within the language.
         if lang == "c":
-            rs = _res(results, "c_scalar", 1920, 1080, 1000)
             rv = _res(results, "c_simd", 1920, 1080, 1000)
-            vals.append((rv["mpix_s"] / rs["mpix_s"]) if rv and rs and rv.get("mpix_s") and rs.get("mpix_s") else None)
+            if rv and csc and rv.get("mpix_s") and csc.get("mpix_s"):
+                vals[3] = rv["mpix_s"] / csc["mpix_s"]
         elif lang == "python":
             rn = _res(results, "python_numba", 1920, 1080, 1000)
             rp = _res(results, "python_pure", 1920, 1080, 500)
-            if rn and rn.get("mpix_s") and rp and rp.get("mpix_s"):
-                vals.append(rn["mpix_s"] / (rp["mpix_s"] * 2.0))  # normalize pure to 1000 iter
-            else:
-                vals.append(None)
+            if rn and rp and rn.get("mpix_s") and rp.get("mpix_s"):
+                vals[3] = rn["mpix_s"] / rp["mpix_s"]
         else:
-            # no explicit vectorized variant: use single-core throughput vs C scalar
-            rv = t1 or r
-            rs = _res(results, "c_scalar", 1920, 1080, 1000)
-            vals.append((rv["mean_ms"] and rs and rs.get("mean_ms") and rv.get("mean_ms"))
-                        and (rs["mean_ms"] / rv["mean_ms"]) or None)
-        # 5) Memory efficiency: inverse peak RSS
-        rb = _res(results, impl, 1920, 1080, 1000) or _res(results, impl, 1920, 1080, 500)
-        vals.append(1.0 / rb["peak_rss_mb"] if rb and rb.get("peak_rss_mb") else None)
+            # No explicit vectorized variant: single-core throughput vs C scalar.
+            if csc and csc.get("mean_ms"):
+                vals[3] = csc["mean_ms"] / r["mean_ms"]
         radar[lang] = vals
 
-    # Normalize each axis across languages.
+    if not radar:
+        return None
+    langs = list(radar.keys())
     normed = {lang: [None] * len(axes) for lang in langs}
     for a in range(len(axes)):
-        col = [radar[lang][a] for lang in langs]
-        mapping = _norm(col)
+        mapping = _norm([radar[lang][a] for lang in langs])
         for lang in langs:
             if lang in mapping:
                 normed[lang][a] = mapping[lang]
@@ -286,8 +277,8 @@ def chart_06(results, thread_scaling):
     palette = {"c": "#1f77b4", "cpp": "#ff7f0e", "java": "#d62728", "python": "#2ca02c"}
     for lang in langs:
         values = normed[lang] + normed[lang][:1]
-        ax.plot(angles, values, marker="o", label=lang.upper(), color=palette[lang])
-        ax.fill(angles, values, alpha=0.08, color=palette[lang])
+        ax.plot(angles, values, marker="o", label=lang.upper(), color=palette.get(lang, "#555"))
+        ax.fill(angles, values, alpha=0.08, color=palette.get(lang, "#555"))
     ax.set_xticks(angles[:-1])
     ax.set_xticklabels(axes)
     ax.set_ylim(0, 1.05)

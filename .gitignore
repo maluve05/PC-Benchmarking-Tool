@@ -29,5 +29,7 @@ env/
 # IDE & OS files
 .vscode/
 .idea/
+.freebuff/
 .DS_Store
 Thumbs.db
+

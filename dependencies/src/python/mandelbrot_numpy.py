@@ -18,6 +18,31 @@ XMIN, XMAX, YMIN, YMAX = -2.0, 0.5, -1.25, 1.25
 CHUNK_PIXELS = 2_000_000  # target pixels per row-chunk (bounds memory at 8K)
 
 
+def _compute_chunk(xs, ys, max_iter):
+    """Escape counts for a chunk. Operates only on the shrinking active set."""
+    w = len(xs)
+    h = len(ys)
+    C = (xs[None, :] + 1j * ys[:, None]).ravel()
+    n = C.size
+    it = np.zeros(n, dtype=np.int32)
+    active = np.arange(n)
+    Z = np.zeros(active.size, dtype=np.complex128)
+    with np.errstate(over="ignore", invalid="ignore"):
+        for k in range(max_iter):
+            Z = Z * Z + C[active]
+            mag2 = Z.real * Z.real + Z.imag * Z.imag
+            esc = mag2 > 4.0
+            if esc.any():
+                it[active[esc]] = k + 1
+                keep = ~esc
+                active = active[keep]
+                Z = Z[keep]
+            if active.size == 0:
+                break
+    it[it == 0] = max_iter  # never escaped -> interior
+    return it.reshape(h, w)
+
+
 def compute(w, h, max_iter):
     """Return int32 array (h, w) of escape iteration counts."""
     dx = (XMAX - XMIN) / w
@@ -28,22 +53,7 @@ def compute(w, h, max_iter):
     it_full = np.zeros((h, w), dtype=np.int32)
     for j0 in range(0, h, chunk_rows):
         j1 = min(j0 + chunk_rows, h)
-        Y = ys[j0:j1, None]
-        C = xs[None, :] + 1j * Y
-        Z = np.zeros_like(C)
-        it = np.zeros((j1 - j0, w), dtype=np.int32)
-        active = np.ones((j1 - j0, w), dtype=bool)
-        with np.errstate(over="ignore", invalid="ignore"):
-            for n in range(max_iter):
-                Z = Z * Z + C
-                escaped = (Z.real * Z.real + Z.imag * Z.imag) > 4.0
-                newly = escaped & active
-                it[newly] = n + 1
-                active &= ~escaped
-                if not active.any():
-                    break
-        it[it == 0] = max_iter  # never escaped -> interior
-        it_full[j0:j1] = it
+        it_full[j0:j1] = _compute_chunk(xs, ys[j0:j1], max_iter)
     return it_full
 
 
