@@ -1,7 +1,0 @@
-run_all.py started: 2026-08-17 01:45:36
-  [SKIP] c: no C compiler available
-  [SKIP] cpp: no C++ compiler available
-  [SKIP] java: no javac available
-  Host: Intel(R) Core(TM) Ultra 7 155H · 22 logical threads · not detected
-  Available implementations: python_pure, python_numpy, python_numba
-  Running resolution × iteration-depth matrix ...

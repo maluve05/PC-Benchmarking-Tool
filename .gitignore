@@ -1,0 +1,33 @@
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.nbc
+*.nbi
+
+# Build & compiled artifacts
+output/build/
+output/raw_data/
+output/charts/
+output/images/
+output/run.log
+output/REPORT.md
+*.exe
+*.o
+*.obj
+*.class
+*.dll
+*.so
+*.dylib
+
+# Virtual environments
+venv/
+.venv/
+env/
+.env/
+
+# IDE & OS files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
