@@ -1,7 +1,7 @@
 """
 benchmark_engine.py — Stages 3 & 4 of the pipeline.
 
-* Stage 3: correctness & visual verification — renders a 1920x1080@1000
+* Stage 3: correctness & visual verification — renders a 1600x1200@256
   image with every available implementation, then cross-validates the
   iteration-count fingerprints for mathematical parity.
 * Stage 4: comprehensive benchmark suite — resolution x iteration-depth
@@ -34,44 +34,46 @@ try:
 except Exception:  # noqa: BLE001
     HAVE_PSUTIL = False
 
+# Primary workload (user-specified): 1600 x 1200 @ 256 iterations.
+BASE_W, BASE_H = 1600, 1200
+VERIFY_W, VERIFY_H, VERIFY_ITER = BASE_W, BASE_H, 256
+DEPTHS = [256, 512, 1024]
+
 # (width, height, max_iter, runs, timeout_seconds)
 FULL_CASES = [
-    (1920, 1080, 500, 5, 120),
-    (1920, 1080, 1000, 5, 120),
-    (1920, 1080, 5000, 3, 240),
-    (3840, 2160, 500, 3, 240),
-    (3840, 2160, 1000, 3, 240),
-    (7680, 4320, 500, 1, 300),
-    (7680, 4320, 1000, 1, 360),
+    (BASE_W, BASE_H, 256, 5, 120),
+    (BASE_W, BASE_H, 512, 5, 120),
+    (BASE_W, BASE_H, 1024, 3, 180),
+    (3840, 2160, 256, 3, 180),
+    (3840, 2160, 512, 3, 180),
+    (7680, 4320, 256, 1, 300),
+    (7680, 4320, 512, 1, 300),
 ]
 QUICK_CASES = [
-    (1920, 1080, 500, 3, 120),
-    (1920, 1080, 1000, 3, 120),
-    (3840, 2160, 1000, 1, 240),
+    (BASE_W, BASE_H, 256, 3, 120),
+    (BASE_W, BASE_H, 512, 3, 120),
+    (3840, 2160, 256, 1, 180),
 ]
 PURE_PYTHON_CASES = [
-    (640, 360, 500, 1, 300),
-    (640, 360, 1000, 1, 300),
-    (1920, 1080, 500, 1, 600),
+    (800, 600, 256, 1, 180),
+    (BASE_W, BASE_H, 256, 1, 300),
 ]
 PURE_PYTHON_QUICK_CASES = [
-    (640, 360, 500, 1, 300),
+    (800, 600, 256, 1, 180),
 ]
-# NumPy is vectorized but pays per-iteration array overhead; a full 4K/8K
-# matrix would take tens of minutes, so it runs the full depth sweep at 1080p
-# plus one 4K@500 datapoint. Larger cases are reported as skipped.
+# NumPy is vectorized but pays per-iteration array overhead; a full 4K/8K or
+# deep-iteration matrix would take tens of minutes, so it runs the base
+# resolution depth sweep plus one 4K@256 datapoint. Larger cases are skipped.
 NUMPY_CASES = [
-    (1920, 1080, 500, 3, 180),
-    (1920, 1080, 1000, 3, 240),
-    (1920, 1080, 5000, 1, 300),
-    (3840, 2160, 500, 1, 300),
+    (BASE_W, BASE_H, 256, 3, 180),
+    (BASE_W, BASE_H, 512, 3, 180),
+    (3840, 2160, 256, 1, 240),
 ]
 NUMPY_QUICK_CASES = [
-    (1920, 1080, 500, 3, 180),
-    (1920, 1080, 1000, 3, 240),
+    (BASE_W, BASE_H, 256, 3, 180),
+    (BASE_W, BASE_H, 512, 3, 180),
 ]
 
-VERIFY_W, VERIFY_H, VERIFY_ITER = 1920, 1080, 1000
 FLOPS_PER_ITER = 8.0  # conservative estimate: 2 mul + 2 add (real), 2 mul + 1 add (imag), 2 mul + 1 add (escape check)
 
 
@@ -259,10 +261,19 @@ def run_impl_bench(impl, ctx, w, h, max_iter, runs, timeout):
     return result
 
 
+# Canonical implementation per language (owns the mandelbrot_<lang>.png name).
+CANONICAL_IMPL = {"c": "c_openmp", "cpp": "cpp", "java": "java", "python": "python_numpy"}
+# Language -> image short name (mission spec: mandelbrot_c/cpp/java/py.png).
+LANG_SHORT = {"c": "c", "cpp": "cpp", "java": "java", "python": "py"}
+
+
 def run_verify(impl, ctx, out_dir=IMG_DIR):
     """Render the verification image + fingerprint for one implementation."""
     threads = _resolve_threads(impl.threads, ctx["max_threads"])
-    png = out_dir / f"mandelbrot_{impl.language}.png"
+    if impl.id == CANONICAL_IMPL.get(impl.language):
+        png = out_dir / f"mandelbrot_{LANG_SHORT.get(impl.language, impl.language)}.png"
+    else:
+        png = out_dir / f"mandelbrot_{impl.id}.png"
     fp = out_dir / f"{impl.id}_fingerprint.json"
     cmd = impl.cmd_builder(impl, "render", VERIFY_W, VERIFY_H, VERIFY_ITER,
                            threads, 1, str(png), str(fp))
@@ -324,7 +335,7 @@ def cross_validate(fingerprints):
 
 
 def run_thread_scaling(impls, ctx, timeout=180):
-    """Thread-scaling study at 1080p@1000 for parallel implementations."""
+    """Thread-scaling study at the base resolution for parallel implementations."""
     w, h, mi, runs = VERIFY_W, VERIFY_H, VERIFY_ITER, 3
     max_threads = ctx["max_threads"]
     thread_list = []

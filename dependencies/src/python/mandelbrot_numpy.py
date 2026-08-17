@@ -58,11 +58,15 @@ def compute(w, h, max_iter):
 
 
 def colorize(it, max_iter):
-    """Map iteration counts to RGB using the shared integer palette."""
+    """Map iteration counts to RGB using the shared integer palette.
+
+    Interior pixels (it == max_iter) map to palette index 255, which is forced
+    to black so the set renders identically to the scalar implementations.
+    """
     idx = np.minimum((it.astype(np.int64) * 255) // max_iter, 255)
     pal = np.zeros((256, 3), dtype=np.uint8)
     for i in range(256):
-        pal[i] = it_to_rgb(i, max_iter)
+        pal[i] = (0, 0, 0) if i >= 255 else it_to_rgb(i, max_iter)
     return pal[idx]  # (h, w, 3)
 
 

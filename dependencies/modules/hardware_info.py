@@ -243,11 +243,36 @@ int main(void) {
         elif system == "Darwin":
             out = _run(["sysctl", "-n", "machdep.cpu.features", "machdep.cpu.leaf7_features"]).upper()
             flags = set(out.replace(",", " ").split())
+        elif system == "Windows":
+            # GetEnabledXStateFeatures bitmask: bit 2 = AVX, bit 3 = AVX-512.
+            try:
+                import ctypes
+                k32 = ctypes.WinDLL("kernel32")
+                fn = k32.GetEnabledXStateFeatures
+                fn.restype = ctypes.c_ulonglong
+                mask = fn()
+                if mask & (1 << 2):
+                    flags.add("avx")
+                if mask & (1 << 3):
+                    flags.add("avx512f")
+                # Heuristic: every x86-64 CPU with AVX released after ~2013 also
+                # has AVX2 + FMA. Refine from the brand string when possible.
+                brand = _cpu_model().lower()
+                modern = any(k in brand for k in ("core i", "ultra", "ryzen",
+                                                  "xeon", "epyc", "athlon", "core(tm)"))
+                if "avx" in flags and modern:
+                    flags.add("avx2")
+                    flags.add("fma")
+                    flags.add("sse4_2")
+                if flags:
+                    isa["method"] = "windows xstate + heuristic"
+            except Exception:  # noqa: BLE001
+                pass
         if flags:
             isa["flags"] = sorted(f for f in flags if f.lower() in
                                   ("avx512f", "avx2", "avx", "fma", "sse4_2", "sse2", "neon", "asimd"))
             isa["detected"] = True
-            isa["method"] = "os features"
+            isa["method"] = isa.get("method") or "os features"
 
     # 3) Normalize into a friendly summary.
     f = [x.lower() for x in isa["flags"]]
@@ -339,7 +364,7 @@ def format_hardware_table(info):
         ("CPU Model", info.get("cpu_model", "unknown")),
         ("Physical Cores", str(info.get("physical_cores", "unknown"))),
         ("Logical Threads", str(info.get("logical_threads", "unknown"))),
-        ("Base / Boost Clock", _fmt_clocks(info)),
+        ("Max / Current Clock", _fmt_clocks(info)),
         ("L1d / L1i Cache", f"{_fmt_kb(info.get('l1d'))} / {_fmt_kb(info.get('l1i'))}"),
         ("L2 Cache", _fmt_kb(info.get("l2"))),
         ("L3 Cache", _fmt_kb(info.get("l3"))),
@@ -362,7 +387,7 @@ def _fmt_clocks(info):
     if base:
         parts.append(f"base {base} MHz")
     if boost:
-        parts.append(f"boost {boost} MHz")
+        parts.append(f"max {boost} MHz")
     if cur:
         parts.append(f"current {cur} MHz")
     return ", ".join(parts) if parts else "unknown"

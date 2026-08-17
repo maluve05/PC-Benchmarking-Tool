@@ -42,8 +42,8 @@ def _res(results, impl, w, h, mi):
     return None
 
 
-def _best_res(results, impl, mi=1000):
-    for (w, h) in [(1920, 1080), (3840, 2160), (7680, 4320)]:
+def _best_res(results, impl, mi=256):
+    for (w, h) in [(1600, 1200), (3840, 2160), (7680, 4320)]:
         r = _res(results, impl, w, h, mi)
         if r:
             return r
@@ -60,8 +60,8 @@ def _fmt_ms(v):
 
 def chart_01(results):
     """Execution time by language across resolutions (log scale)."""
-    resolutions = [(1920, 1080, "1080p"), (3840, 2160, "4K"), (7680, 4320, "8K")]
-    labels = [d for d in DISPLAY if any(_res(results, d, w, h, 1000) for w, h, _ in resolutions)]
+    resolutions = [(1600, 1200, "1600×1200"), (3840, 2160, "4K"), (7680, 4320, "8K")]
+    labels = [d for d in DISPLAY if any(_res(results, d, w, h, 256) for w, h, _ in resolutions)]
     if not labels:
         return None
     x = np.arange(len(labels))
@@ -70,7 +70,7 @@ def chart_01(results):
     for k, (w, h, name) in enumerate(resolutions):
         vals = []
         for d in labels:
-            r = _res(results, d, w, h, 1000)
+            r = _res(results, d, w, h, 256)
             vals.append(r["mean_ms"] if r else np.nan)
         ax.bar(x + (k - 1) * width, vals, width, label=name,
                color=["#1f77b4", "#ff7f0e", "#d62728"][k])
@@ -78,7 +78,7 @@ def chart_01(results):
     ax.set_xticks(x)
     ax.set_xticklabels([SHORT.get(d, d) for d in labels], rotation=15)
     ax.set_ylabel("Mean wall-clock time (ms, log scale)")
-    ax.set_title("Mandelbrot Rendering Time by Language & Resolution (N=1000)")
+    ax.set_title("Mandelbrot Rendering Time by Language & Resolution (N=256)")
     ax.legend(title="Resolution")
     ax.grid(True, which="both", alpha=0.3)
     fig.tight_layout()
@@ -100,8 +100,8 @@ def _extrapolate_pure_python(results, w, h, mi):
 
 
 def chart_02(results):
-    """Speedup relative to pure-Python baseline at 1080p@500."""
-    w, h, mi = 1920, 1080, 500
+    """Speedup relative to pure-Python baseline at 1600x1200@256."""
+    w, h, mi = 1600, 1200, 256
     pure = _res(results, "python_pure", w, h, mi)
     if not pure or not pure.get("mean_ms"):
         return None
@@ -121,14 +121,14 @@ def chart_02(results):
     ax.set_xticks(range(len(impls)))
     ax.set_xticklabels([SHORT.get(d, d) for d in impls], rotation=15)
     ax.set_ylabel(f"Speedup vs Pure Python ({_fmt_ms(baseline)} baseline)")
-    ax.set_title("Speedup Relative to Pure-Python Baseline (1920x1080 @ 500 iter)")
+    ax.set_title("Speedup Relative to Pure-Python Baseline (1600x1200 @ 256 iter)")
     ax.grid(True, axis="y", alpha=0.3)
     fig.tight_layout()
     return _save(fig, "02_speedup_relative_to_baseline.png")
 
 
 def chart_03(thread_scaling):
-    """Multicore thread scaling (Amdahl efficiency) at 1080p@1000."""
+    """Multicore thread scaling (Amdahl efficiency) at the base resolution."""
     data = {}
     for r in thread_scaling:
         if r["status"] == "ok" and r.get("mean_ms"):
@@ -151,7 +151,7 @@ def chart_03(thread_scaling):
     ax.get_xaxis().set_major_formatter(matplotlib.ticker.ScalarFormatter())
     ax.set_xlabel("Thread count (log2)")
     ax.set_ylabel("Mean wall-clock time (ms)")
-    ax.set_title("Multicore Thread Scaling — 1920x1080 @ 1000 iter")
+    ax.set_title("Multicore Thread Scaling — 1600x1200 @ 256 iter")
     ax.legend()
     ax.grid(True, alpha=0.3)
     fig.tight_layout()
@@ -159,16 +159,16 @@ def chart_03(thread_scaling):
 
 
 def chart_04(results):
-    """Throughput (MPix/s) vs iteration depth at 1080p."""
-    depths = [500, 1000, 5000]
-    impls = [d for d in DISPLAY if any(_res(results, d, 1920, 1080, mi) for mi in depths)]
+    """Throughput (MPix/s) vs iteration depth at the base resolution."""
+    depths = [256, 512, 1024]
+    impls = [d for d in DISPLAY if any(_res(results, d, 1600, 1200, mi) for mi in depths)]
     if not impls:
         return None
     fig, ax = plt.subplots(figsize=(10, 6))
     for d in impls:
         xs, ys = [], []
         for mi in depths:
-            r = _res(results, d, 1920, 1080, mi)
+            r = _res(results, d, 1600, 1200, mi)
             if r and r.get("mpix_s"):
                 xs.append(mi)
                 ys.append(r["mpix_s"])
@@ -179,7 +179,7 @@ def chart_04(results):
     ax.get_xaxis().set_major_formatter(matplotlib.ticker.ScalarFormatter())
     ax.set_xlabel("Max iterations (N)")
     ax.set_ylabel("Throughput (Megapixels / s)")
-    ax.set_title("Rendering Throughput vs Iteration Depth (1920x1080)")
+    ax.set_title("Rendering Throughput vs Iteration Depth (1600x1200)")
     ax.legend()
     ax.grid(True, alpha=0.3)
     fig.tight_layout()
@@ -187,10 +187,10 @@ def chart_04(results):
 
 
 def chart_05(results):
-    """Peak memory consumption per implementation (1080p@1000)."""
+    """Peak memory consumption per implementation (base res @ 256)."""
     rows = []
     for d in DISPLAY:
-        r = _res(results, d, 1920, 1080, 1000) or _res(results, d, 1920, 1080, 500)
+        r = _res(results, d, 1600, 1200, 256) or _res(results, d, 1600, 1200, 512)
         if r and r.get("peak_rss_mb"):
             rows.append((d, r["peak_rss_mb"]))
     if not rows:
@@ -204,7 +204,7 @@ def chart_05(results):
     ax.set_xticks(range(len(rows)))
     ax.set_xticklabels(labels, rotation=15)
     ax.set_ylabel("Peak RSS (MB)")
-    ax.set_title("Peak Memory Footprint per Implementation (1920x1080 @ 1000 iter)")
+    ax.set_title("Peak Memory Footprint per Implementation (1600x1200 @ 256 iter)")
     ax.grid(True, axis="y", alpha=0.3)
     fig.tight_layout()
     return _save(fig, "05_memory_consumption.png")
@@ -234,10 +234,10 @@ def chart_06(results, thread_scaling):
     axes = ["Throughput", "Single-core", "Multicore", "Vectorized", "Mem-efficiency"]
     radar = {}
     for lang, impl in canon.items():
-        r = _best_res(results, impl, 1000)
+        r = _best_res(results, impl, 256)
         if not r:
             continue
-        csc = _res(results, "c_scalar", 1920, 1080, 1000)
+        csc = _res(results, "c_scalar", 1600, 1200, 256)
         vals = [
             1.0 / r["mean_ms"] if r.get("mean_ms") else None,                     # throughput
             _scaling(impl),                                                          # single-core (t1 from scaling)
@@ -247,12 +247,12 @@ def chart_06(results, thread_scaling):
         ]
         # Vectorized: vectorized vs scalar throughput within the language.
         if lang == "c":
-            rv = _res(results, "c_simd", 1920, 1080, 1000)
+            rv = _res(results, "c_simd", 1600, 1200, 256)
             if rv and csc and rv.get("mpix_s") and csc.get("mpix_s"):
                 vals[3] = rv["mpix_s"] / csc["mpix_s"]
         elif lang == "python":
-            rn = _res(results, "python_numba", 1920, 1080, 1000)
-            rp = _res(results, "python_pure", 1920, 1080, 500)
+            rn = _res(results, "python_numba", 1600, 1200, 256)
+            rp = _res(results, "python_pure", 1600, 1200, 256)
             if rn and rp and rn.get("mpix_s") and rp.get("mpix_s"):
                 vals[3] = rn["mpix_s"] / rp["mpix_s"]
         else:

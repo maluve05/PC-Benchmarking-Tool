@@ -53,6 +53,8 @@ def _results_matrix(results, w, h, mi):
             f"{r.get('gflops', 0):.1f}" if r.get("gflops") else "—",
             f"{r.get('peak_rss_mb', 0):.1f} MB",
         ])
+    if len(rows) == 1:
+        return ""  # no data for this (resolution, depth)
     return _md_table(rows)
 
 
@@ -64,13 +66,13 @@ def _md_table(rows):
 
 
 def _speedup_table(results):
-    """Speedup vs pure Python at 1080p@500 (measured) and 1080p@1000 (extrapolated baseline)."""
-    pure500 = _res(results, "python_pure", 1920, 1080, 500)
-    if not pure500 or not pure500.get("mean_ms"):
-        return "No pure-Python 1080p@500 baseline available."
-    base500 = pure500["mean_ms"]
-    # Extrapolated pure baseline at 1080p@1000.
-    base1000 = None
+    """Speedup vs pure Python at 1600x1200@256 (measured) and @512 (extrapolated)."""
+    pure256 = _res(results, "python_pure", 1600, 1200, 256)
+    if not pure256 or not pure256.get("mean_ms"):
+        return "No pure-Python 1600x1200@256 baseline available."
+    base256 = pure256["mean_ms"]
+    # Extrapolated pure baseline at 1600x1200@512.
+    base512 = None
     small = None
     for r in results:
         if r["impl"] == "python_pure" and r["status"] == "ok":
@@ -78,18 +80,18 @@ def _speedup_table(results):
             if small is None or work < small["work"]:
                 small = {**r, "work": work}
     if small and small["work"]:
-        base1000 = small["mean_ms"] * (1920 * 1080 * 1000) / small["work"]
+        base512 = small["mean_ms"] * (1600 * 1200 * 512) / small["work"]
 
-    rows = [["Implementation", "1080p@500 speedup", "1080p@1000 speedup (extrapolated baseline)"]]
+    rows = [["Implementation", "1600x1200@256 speedup", "1600x1200@512 speedup (extrapolated baseline)"]]
     for d in DISPLAY:
-        r500 = _res(results, d, 1920, 1080, 500)
-        s500 = f"{base500 / r500['mean_ms']:.1f}x" if r500 and r500.get("mean_ms") else "—"
-        r1000 = _res(results, d, 1920, 1080, 1000)
-        if r1000 and r1000.get("mean_ms") and base1000:
-            s1000 = f"{base1000 / r1000['mean_ms']:.1f}x"
+        r256 = _res(results, d, 1600, 1200, 256)
+        s256 = f"{base256 / r256['mean_ms']:.1f}x" if r256 and r256.get("mean_ms") else "—"
+        r512 = _res(results, d, 1600, 1200, 512)
+        if r512 and r512.get("mean_ms") and base512:
+            s512 = f"{base512 / r512['mean_ms']:.1f}x"
         else:
-            s1000 = "—"
-        rows.append([SHORT.get(d, d), s500, s1000])
+            s512 = "—"
+        rows.append([SHORT.get(d, d), s256, s512])
     return _md_table(rows)
 
 
@@ -144,9 +146,9 @@ def _executive_summary(results, hardware, quick):
     threads = hardware.get("logical_threads", "?")
     best = None
     for d in DISPLAY:
-        r = _res(results, d, 1920, 1080, 1000)
+        r = _res(results, d, 1600, 1200, 256)
         if r and r.get("mean_ms"):
-            if best is None or r["mean_ms"] < best["mean_ms"]:
+            if best is None or r["mean_ms"] < best["ms"]:
                 best = {"name": SHORT.get(d, d), "ms": r["mean_ms"]}
     lines = [
         f"This report evaluates the host machine **({cpu}, {threads} logical threads)** and compares "
@@ -154,7 +156,7 @@ def _executive_summary(results, hardware, quick):
         "",
         f"- **Benchmark mode:** {'quick' if quick else 'full'} matrix "
         f"({ok}/{total} benchmark runs completed successfully).",
-        f"- **Best absolute time @ 1080p/1000:** {best['name']} at {_fmt_ms(best['ms'])}." if best else "",
+        f"- **Best absolute time @ 1600x1200/256:** {best['name']} at {_fmt_ms(best['ms'])}." if best else "",
         "- **Correctness:** all implementations were cross-validated against each other via "
         "iteration-count fingerprints (see §3).",
         "- **Key finding:** natively compiled / JIT-vectorized implementations outperform the "
@@ -171,7 +173,7 @@ def _deep_dive(results, thread_scaling, hardware):
     # AOT vs JIT vs Interpreted
     rows = []
     for d in DISPLAY:
-        r = _res(results, d, 1920, 1080, 1000)
+        r = _res(results, d, 1600, 1200, 256)
         if r and r.get("mean_ms"):
             rows.append((SHORT.get(d, d), r["mean_ms"]))
     if rows:
@@ -180,7 +182,7 @@ def _deep_dive(results, thread_scaling, hardware):
         slowest, s_ms = rows[-1]
         out.append("### 8.1 AOT-Compiled vs JIT vs Interpreted\n")
         out.append(
-            f"The measured 1080p@1000 ordering is: **{fastest}** ({_fmt_ms(f_ms)}) → ... → "
+            f"The measured 1600x1200@256 ordering is: **{fastest}** ({_fmt_ms(f_ms)}) → ... → "
             f"**{slowest}** ({_fmt_ms(s_ms)}), i.e. a **{s_ms / f_ms:.0f}×** spread on a single "
             "workload. AOT compilation (C/C++ with `-O3 -march=native`), the Java HotSpot C2 JIT "
             "compiler, and Numba's LLVM JIT all reach native-class performance on the hot inner "
@@ -191,12 +193,12 @@ def _deep_dive(results, thread_scaling, hardware):
         out.append("")
 
     # Vectorization / SIMD
-    csc = _res(results, "c_scalar", 1920, 1080, 1000)
-    csm = _res(results, "c_simd", 1920, 1080, 1000)
+    csc = _res(results, "c_scalar", 1600, 1200, 256)
+    csm = _res(results, "c_simd", 1600, 1200, 256)
     if csc and csm and csc.get("mpix_s") and csm.get("mpix_s"):
         out.append("### 8.2 Vectorization / SIMD\n")
         out.append(
-            f"The C AVX2 kernel processes 8 pixels per SIMD lane-group. At 1080p@1000 the SIMD "
+            f"The C AVX2 kernel processes 8 pixels per SIMD lane-group. At 1600x1200@256 the SIMD "
             f"variant reached **{csm['mpix_s']:.1f} MPix/s** vs **{csc['mpix_s']:.1f} MPix/s** for "
             f"the scalar kernel, a **{csm['mpix_s'] / csc['mpix_s']:.2f}×** vectorization gain "
             f"(compiler auto-vectorization of the scalar loop already captures part of this). "
@@ -210,8 +212,8 @@ def _deep_dive(results, thread_scaling, hardware):
     out.append(
         "All implementations render row-by-row, writing one contiguous row of RGB output at a time, "
         "which keeps writes streaming and cache-friendly. The iteration-count grid is small enough "
-        "to stay resident; the dominant memory cost is the output image itself (1080p ≈ 6 MB RGB, "
-        "8K ≈ 100 MB RGB). NumPy materializes complex64/128 grid temporaries per row-chunk, which "
+        "to stay resident; the dominant memory cost is the output image itself (1600x1200 ≈ 5.8 MB "
+        "RGB, 8K ≈ 100 MB RGB). NumPy materializes complex64/128 grid temporaries per row-chunk, which "
         "shows up as higher peak RSS; native implementations stream pixels and keep RSS near the "
         "image size. Parallel variants render disjoint row ranges, avoiding false sharing on the "
         "output buffer (each thread owns distinct cache lines)."
@@ -273,13 +275,13 @@ def generate_report(results, thread_scaling, validation, hardware, meta):
     lines.append(
         "- **Algorithm:** escape-time algorithm with viewport x∈[-2.0, 0.5], y∈[-1.25, 1.25], "
         "escape radius R=2 (|z|²>4), pixel-centered sampling, deterministic integer palette.\n"
-        "- **Verification:** every implementation renders 1920×1080 @ N=1000; a strided "
+        "- **Verification:** every implementation renders 1600×1200 @ N=256; a strided "
         "iteration-count fingerprint (SHA-256 + pairwise diff) proves mathematical parity.\n"
         "- **Benchmark:** warmup run followed by ≥1 timed runs per case; wall-clock statistics "
         "(min/mean/median/stddev), throughput (MPix/s), GFLOPS estimate (8 FLOP/iteration) and "
         "peak RSS (psutil polling).\n"
-        "- **Matrix:** resolutions 1080p / 4K / 8K × iteration depths 500 / 1000 / 5000, plus a "
-        "thread-scaling study at 1080p@1000 from 1 → max logical threads."
+        "- **Matrix:** resolutions 1600×1200 / 4K / 8K × iteration depths 256 / 512 / 1024, plus a "
+        "thread-scaling study at 1600×1200@256 from 1 → max logical threads."
     )
     lines.append("")
 
@@ -294,10 +296,10 @@ def generate_report(results, thread_scaling, validation, hardware, meta):
 
     lines.append("## 4. Consolidated Results Matrix")
     lines.append("")
-    for (w, h, name) in [(1920, 1080, "1080p"), (3840, 2160, "4K"), (7680, 4320, "8K")]:
-        for mi in (500, 1000, 5000):
+    for (w, h, name) in [(1600, 1200, "1600×1200"), (3840, 2160, "4K"), (7680, 4320, "8K")]:
+        for mi in (256, 512, 1024):
             table = _results_matrix(results, w, h, mi)
-            if "| ---" in table:
+            if table:
                 lines.append(f"### {name} @ N={mi}")
                 lines.append("")
                 lines.append(table)
@@ -309,8 +311,8 @@ def generate_report(results, thread_scaling, validation, hardware, meta):
     lines.append(_speedup_table(results))
     lines.append("")
     lines.append(
-        "The 1080p@1000 baseline is extrapolated linearly from the smallest measured pure-Python "
-        "case (runtime scales with pixels × iterations); the 1080p@500 baseline is measured."
+        "The 1600x1200@512 baseline is extrapolated linearly from the smallest measured pure-Python "
+        "case (runtime scales with pixels × iterations); the 1600x1200@256 baseline is measured."
     )
     lines.append("")
 

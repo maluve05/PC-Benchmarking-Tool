@@ -30,10 +30,10 @@ That single invocation performs **everything**:
 2. **Compilation** — builds C / C++ (`-O3 -march=native -ffast-math -fopenmp`)
    and Java (`javac`) with optimal flags. Missing compilers are reported and
    skipped gracefully — the suite continues with whatever is available.
-3. **Verification** — renders a 1920×1080 @ N=1000 image with every available
+3. **Verification** — renders a 1600×1200 @ N=256 image with every available
    implementation and cross-validates iteration-count fingerprints for
    mathematical parity.
-4. **Benchmarking** — 1080p / 4K / 8K × iteration depths 500 / 1000 / 5000,
+4. **Benchmarking** — 1600×1200 / 4K / 8K × iteration depths 256 / 512 / 1024,
    warmups + timed runs, throughput (MPix/s), GFLOPS estimate and peak RSS, plus
    a 1→max-thread scaling study.
 5. **Charts** — six 300-DPI publication PNGs in `output/charts/`.
@@ -78,7 +78,7 @@ python run_all.py --skip-report    # skip report generation
 - Viewport: `x ∈ [-2.0, 0.5]`, `y ∈ [-1.25, 1.25]`
 - Recurrence: `zₙ₊₁ = zₙ² + c` with `z₀ = 0`
 - Escape radius: `|zₙ|² > 4` (R = 2)
-- Iteration depths: 500 / 1000 / 5000
+- Primary workload: 1600×1200 @ 256 iterations (depth sweep 256 / 512 / 1024)
 - Interior = black; exterior = deterministic integer palette (bit-identical
   across languages)
 

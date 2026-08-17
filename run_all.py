@@ -128,7 +128,7 @@ def main():
 
     # ── Stage 3 · Verification ─────────────────────────────────────────────
     if not args.skip_verify:
-        section("Stage 3 · Correctness & Visual Verification (1080p @ N=1000)")
+        section("Stage 3 · Correctness & Visual Verification (1600x1200 @ N=256)")
         fps = []
         for impl in impls:
             if not impl.available:
@@ -157,7 +157,7 @@ def main():
         log("  Running resolution × iteration-depth matrix ...")
         results = be.run_benchmarks(impls, ctx, quick=args.quick)
         if not args.skip_thread_scaling:
-            log("  Running thread-scaling study (1080p @ N=1000, 1→max threads) ...")
+            log("  Running thread-scaling study (1600x1200 @ N=256, 1→max threads) ...")
             thread_scaling = be.run_thread_scaling([i for i in impls if i.available], ctx)
         json_path, csv_path = be.save_results(results, thread_scaling, validation)
         log(f"  Results -> {json_path}")
