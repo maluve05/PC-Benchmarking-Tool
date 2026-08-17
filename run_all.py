@@ -98,6 +98,10 @@ def main():
     section("Stage 2 · Automated Compilation")
     import builder
     builds = builder.build_all(toolchain)
+    # Add Java runtime path if available
+    if builds.get("java", {}).get("ok") and toolchain.get("java"):
+        builds["java"]["java"] = toolchain["java"]["path"]
+    
     for lang, b in builds.items():
         if b.get("ok"):
             log(f"  [OK] {lang}: {b.get('exe') or b.get('class_dir')}  ({b.get('compiler')})")
