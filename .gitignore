@@ -1,17 +1,15 @@
-# Python cache
+# Python cache & bytecode
 __pycache__/
 *.py[cod]
 *$py.class
 *.nbc
 *.nbi
+.pytest_cache/
+.coverage
+htmlcov/
 
 # Build & compiled artifacts
-output/build/
-output/raw_data/
-output/charts/
-output/images/
-output/run.log
-output/REPORT.md
+output/
 *.exe
 *.o
 *.obj
@@ -27,9 +25,15 @@ env/
 .env/
 
 # IDE & OS files
-.vscode/
 .idea/
 .freebuff/
 .DS_Store
 Thumbs.db
+*.swp
+*.swo
 
+# Allow VS Code shared workspace configs
+.vscode/*
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/settings.json

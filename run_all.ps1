@@ -1,6 +1,21 @@
 # run_all.ps1 — PowerShell wrapper for the Mandelbrot benchmark suite.
-# Usage:  .\run_all.ps1            (full run)
-#         .\run_all.ps1 -Quick     (reduced workload)
+# Usage:
+#   .\run_all.ps1                      (full run)
+#   .\run_all.ps1 -Quick               (reduced workload)
+#   .\run_all.ps1 -SkipVerify          (selective stages)
+
+[CmdletBinding()]
+param(
+    [switch]$Quick,
+    [switch]$SkipVerify,
+    [switch]$SkipBench,
+    [switch]$SkipThreadScaling,
+    [switch]$SkipCharts,
+    [switch]$SkipReport,
+    [Parameter(ValueFromRemainingArguments = $true)]
+    [string[]]$ExtraArgs
+)
+
 $ErrorActionPreference = "Stop"
 $Root = Split-Path -Parent $MyInvocation.MyCommand.Path
 Set-Location $Root
@@ -16,7 +31,14 @@ if (-not $Python) {
     exit 1
 }
 
-$args = @()
-if ($Quick) { $args += "--quick" }
-& $Python "run_all.py" @args
+$PyArgs = @()
+if ($Quick) { $PyArgs += "--quick" }
+if ($SkipVerify) { $PyArgs += "--skip-verify" }
+if ($SkipBench) { $PyArgs += "--skip-bench" }
+if ($SkipThreadScaling) { $PyArgs += "--skip-thread-scaling" }
+if ($SkipCharts) { $PyArgs += "--skip-charts" }
+if ($SkipReport) { $PyArgs += "--skip-report" }
+if ($ExtraArgs) { $PyArgs += $ExtraArgs }
+
+& $Python "run_all.py" @PyArgs
 exit $LASTEXITCODE

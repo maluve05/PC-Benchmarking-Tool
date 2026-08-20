@@ -11,7 +11,14 @@ Produces six publication-ready (300 DPI) PNG charts in output/charts/:
 """
 import math
 import os
+import sys
 from pathlib import Path
+
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
 
 import matplotlib
 matplotlib.use("Agg")

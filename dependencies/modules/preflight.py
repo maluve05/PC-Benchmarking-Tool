@@ -16,6 +16,12 @@ import subprocess
 import sys
 from pathlib import Path
 
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
+
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 REQUIREMENTS = PROJECT_ROOT / "requirements.txt"
 
@@ -135,6 +141,16 @@ def detect_compilers():
                         if cl.exists():
                             toolchain["cl_exe"] = str(cl)
                             break
+
+    # Check JAVA_HOME fallback
+    if not toolchain["javac"] and os.environ.get("JAVA_HOME"):
+        jh_javac = Path(os.environ["JAVA_HOME"]) / "bin" / ("javac.exe" if os.name == "nt" else "javac")
+        if jh_javac.exists():
+            toolchain["javac"] = {"path": str(jh_javac), "version": _probe_version(str(jh_javac))}
+    if not toolchain["java"] and os.environ.get("JAVA_HOME"):
+        jh_java = Path(os.environ["JAVA_HOME"]) / "bin" / ("java.exe" if os.name == "nt" else "java")
+        if jh_java.exists():
+            toolchain["java"] = {"path": str(jh_java), "version": _probe_version(str(jh_java))}
 
     # Decide the "best" C/C++ compiler (MSVC cl needs vcvars, so it is last resort).
     for key, label in (("clang", "clang"), ("gcc", "gcc")):

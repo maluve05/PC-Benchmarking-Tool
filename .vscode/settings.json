@@ -1,0 +1,22 @@
+{
+  "python.testing.unittestArgs": [
+    "-v",
+    "-s",
+    "./tests",
+    "-p",
+    "test_*.py"
+  ],
+  "python.testing.pytestEnabled": false,
+  "python.testing.unittestEnabled": true,
+  "python.analysis.extraPaths": [
+    "${workspaceFolder}/dependencies",
+    "${workspaceFolder}/dependencies/modules",
+    "${workspaceFolder}/dependencies/src/python"
+  ],
+  "files.associations": {
+    "*.c": "c",
+    "*.cpp": "cpp",
+    "*.h": "c",
+    "*.java": "java"
+  }
+}

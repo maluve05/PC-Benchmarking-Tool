@@ -18,6 +18,12 @@ import sys
 import tempfile
 from pathlib import Path
 
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
+
 try:
     import psutil
     HAVE_PSUTIL = True
@@ -69,11 +75,32 @@ def _cpu_cores():
     return info
 
 
+_WIN32_PROC_CACHE = None
+
+
+def _get_win32_proc():
+    global _WIN32_PROC_CACHE
+    if _WIN32_PROC_CACHE is None:
+        _WIN32_PROC_CACHE = {}
+        if platform.system() == "Windows":
+            out = _ps("(Get-CimInstance Win32_Processor) | Select-Object Name,MaxClockSpeed,CurrentClockSpeed,L2CacheSize,L3CacheSize | ConvertTo-Json")
+            if out:
+                try:
+                    import json
+                    d = json.loads(out)
+                    if isinstance(d, list):
+                        d = d[0]
+                    _WIN32_PROC_CACHE = d if isinstance(d, dict) else {}
+                except Exception:
+                    pass
+    return _WIN32_PROC_CACHE
+
+
 def _cpu_model():
     system = platform.system()
     if system == "Windows":
-        out = _ps("(Get-CimInstance Win32_Processor).Name")
-        return out or platform.processor() or "unknown"
+        wp = _get_win32_proc()
+        return wp.get("Name") or platform.processor() or "unknown"
     if system == "Linux":
         out = ""
         try:
@@ -94,17 +121,9 @@ def _cpu_clocks():
     info = {"base_mhz": None, "boost_mhz": None, "current_mhz": None}
     system = platform.system()
     if system == "Windows":
-        out = _ps("(Get-CimInstance Win32_Processor) | Select-Object MaxClockSpeed,CurrentClockSpeed | ConvertTo-Json")
-        if out:
-            try:
-                import json
-                d = json.loads(out)
-                if isinstance(d, list):
-                    d = d[0]
-                info["boost_mhz"] = int(d.get("MaxClockSpeed") or 0) or None
-                info["current_mhz"] = int(d.get("CurrentClockSpeed") or 0) or None
-            except Exception:  # noqa: BLE001
-                pass
+        wp = _get_win32_proc()
+        info["boost_mhz"] = int(wp.get("MaxClockSpeed") or 0) or None
+        info["current_mhz"] = int(wp.get("CurrentClockSpeed") or 0) or None
     if HAVE_PSUTIL:
         try:
             f = psutil.cpu_freq()
@@ -121,22 +140,14 @@ def _caches():
     info = {"l1d": None, "l1i": None, "l2": None, "l3": None}
     system = platform.system()
     if system == "Windows":
-        out = _ps("Get-CimInstance Win32_Processor | Select-Object L2CacheSize,L3CacheSize | ConvertTo-Json")
-        if out:
-            try:
-                import json
-                d = json.loads(out)
-                if isinstance(d, list):
-                    d = d[0]
-                info["l2"] = int(d.get("L2CacheSize") or 0) or None
-                info["l3"] = int(d.get("L3CacheSize") or 0) or None
-            except Exception:  # noqa: BLE001
-                pass
+        wp = _get_win32_proc()
+        info["l2"] = int(wp.get("L2CacheSize") or 0) or None
+        info["l3"] = int(wp.get("L3CacheSize") or 0) or None
         l1 = _ps("Get-CimInstance Win32_CacheMemory | Where-Object {$_.CacheType -eq 3} | Select-Object -First 1 -ExpandProperty MaxCacheSize")
-        if l1:
+        if l1 and l1.isdigit():
             info["l1d"] = int(l1)
         l1i = _ps("Get-CimInstance Win32_CacheMemory | Where-Object {$_.CacheType -eq 4} | Select-Object -First 1 -ExpandProperty MaxCacheSize")
-        if l1i:
+        if l1i and l1i.isdigit():
             info["l1i"] = int(l1i)
         return info
     if system == "Linux":

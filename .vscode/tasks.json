@@ -1,0 +1,60 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Run Benchmark (Full Suite)",
+      "type": "shell",
+      "command": "python run_all.py",
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared",
+        "focus": true
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Run Benchmark (Quick Mode)",
+      "type": "shell",
+      "command": "python run_all.py --quick",
+      "group": "build",
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared",
+        "focus": true
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Run Unit Tests",
+      "type": "shell",
+      "command": "python -m unittest discover -s tests -v",
+      "group": {
+        "kind": "test",
+        "isDefault": true
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Clean Output Artifacts",
+      "type": "shell",
+      "windows": {
+        "command": "powershell -NoProfile -Command \"Remove-Item -Recurse -Force output/* -ErrorAction SilentlyContinue\""
+      },
+      "linux": {
+        "command": "rm -rf output/*"
+      },
+      "osx": {
+        "command": "rm -rf output/*"
+      },
+      "problemMatcher": []
+    }
+  ]
+}

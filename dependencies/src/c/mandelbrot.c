@@ -73,7 +73,7 @@ static void mandel_scalar_row(int w, double y0, int max_iter, int *it_row) {
     }
 }
 
-/* ---- AVX2 SIMD kernel (8 pixels / iteration) ---- */
+/* ---- AVX2 SIMD kernel (4 double-precision pixels / iteration) ---- */
 #ifdef __AVX2__
 #include <immintrin.h>
 static void mandel_simd_row(int w, double y0, int max_iter, int *it_row) {
@@ -82,9 +82,9 @@ static void mandel_simd_row(int w, double y0, int max_iter, int *it_row) {
     __m256d one = _mm256_set1_pd(1.0);
     __m256d y0v = _mm256_set1_pd(y0);
     int i = 0;
-    for (; i + 8 <= w; i += 8) {
-        double x0[8];
-        for (int k = 0; k < 8; k++) x0[k] = XMIN + (i + k + 0.5) * dx;
+    for (; i + 4 <= w; i += 4) {
+        double x0[4];
+        for (int k = 0; k < 4; k++) x0[k] = XMIN + (i + k + 0.5) * dx;
         __m256d x0v = _mm256_loadu_pd(x0);
         __m256d x = _mm256_setzero_pd();
         __m256d y = _mm256_setzero_pd();
@@ -106,11 +106,11 @@ static void mandel_simd_row(int w, double y0, int max_iter, int *it_row) {
             if (_mm256_testz_si256(newactive, newactive)) break;
             active = newactive;
         }
-        double itf[8];
+        double itf[4];
         _mm256_storeu_pd(itf, itd);
         long long actf[4];
         _mm256_storeu_si256((__m256i *)actf, active);
-        for (int k = 0; k < 8; k++) {
+        for (int k = 0; k < 4; k++) {
             it_row[i + k] = (actf[k] != 0) ? max_iter : (int)(itf[k] + 1.0);
         }
     }
@@ -160,14 +160,15 @@ static void compute_frame(int w, int h, int max_iter, int threads, int use_simd)
 #pragma omp parallel
     {
         int *it_row = (int *)malloc((size_t)w * sizeof(int));
-        if (!it_row) continue; /* cannot happen inside omp region; guard */
+        if (it_row) {
 #pragma omp for schedule(dynamic)
-        for (int j = 0; j < h; j++) {
-            const double y0 = YMAX - (j + 0.5) * dy;
-            if (use_simd) mandel_simd_row(w, y0, max_iter, it_row);
-            else mandel_scalar_row(w, y0, max_iter, it_row);
+            for (int j = 0; j < h; j++) {
+                const double y0 = YMAX - (j + 0.5) * dy;
+                if (use_simd) mandel_simd_row(w, y0, max_iter, it_row);
+                else mandel_scalar_row(w, y0, max_iter, it_row);
+            }
+            free(it_row);
         }
-        free(it_row);
     }
 }
 
@@ -192,21 +193,22 @@ static int render_frame(int w, int h, int max_iter, int threads, int use_simd,
 #pragma omp parallel
     {
         int *it_row = (int *)malloc((size_t)w * sizeof(int));
-        if (!it_row) continue;
+        if (it_row) {
 #pragma omp for schedule(dynamic)
-        for (int j = 0; j < h; j++) {
-            const double y0 = YMAX - (j + 0.5) * dy;
-            if (use_simd) mandel_simd_row(w, y0, max_iter, it_row);
-            else mandel_scalar_row(w, y0, max_iter, it_row);
-            uint8_t *row = img + (size_t)j * (size_t)w * 3;
-            for (int i = 0; i < w; i++) it_to_rgb(it_row[i], max_iter, row + i * 3);
-            if (j % stride == 0) {
-                int r = j / stride;
-                int *base = samples + (size_t)r * (size_t)sample_cols;
-                for (int i = 0; i < w; i += stride) base[i / stride] = it_row[i];
+            for (int j = 0; j < h; j++) {
+                const double y0 = YMAX - (j + 0.5) * dy;
+                if (use_simd) mandel_simd_row(w, y0, max_iter, it_row);
+                else mandel_scalar_row(w, y0, max_iter, it_row);
+                uint8_t *row = img + (size_t)j * (size_t)w * 3;
+                for (int i = 0; i < w; i++) it_to_rgb(it_row[i], max_iter, row + i * 3);
+                if (j % stride == 0) {
+                    int r = j / stride;
+                    int *base = samples + (size_t)r * (size_t)sample_cols;
+                    for (int i = 0; i < w; i += stride) base[i / stride] = it_row[i];
+                }
             }
+            free(it_row);
         }
-        free(it_row);
     }
 
     int ok = 0;
